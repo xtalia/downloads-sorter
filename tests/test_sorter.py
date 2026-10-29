@@ -99,6 +99,47 @@ class SorterTest(unittest.TestCase):
         self.assertEqual((script.parent / 'photos' / 'photo.JPG').read_bytes(), b'photo')
         self.assertFalse((script.parent / 'programs' / launcher.name).exists())
 
+    @unittest.skipUnless(os.name == 'nt' and VARIANT in {'modern', 'legacy'},
+                         'Native Windows BAT launchers only')
+    def test_renamed_windows_launcher_short_path_cwd_never_moves(self):
+        import ctypes
+        from ctypes import wintypes
+
+        script = self.copy_bundle('launcher short alias space & (test)!')
+        original = script.with_name('sort-downloads.bat' if VARIANT == 'modern'
+                                    else 'sort-downloads-legacy.bat')
+        launcher = original.with_name('renamed & (launcher)!.bat')
+        original.rename(launcher)
+        before = launcher.read_bytes()
+        long_cwd = str(script.parent.resolve())
+        get_short_path = ctypes.WinDLL('kernel32', use_last_error=True).GetShortPathNameW
+        get_short_path.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+        get_short_path.restype = wintypes.DWORD
+        size = get_short_path(long_cwd, None, 0)
+        if not size:
+            raise ctypes.WinError(ctypes.get_last_error())
+        buffer = ctypes.create_unicode_buffer(size)
+        length = get_short_path(long_cwd, buffer, size)
+        if not length:
+            raise ctypes.WinError(ctypes.get_last_error())
+        self.assertLess(length, size)
+        short_cwd = buffer.value
+        if os.path.normcase(short_cwd) == os.path.normcase(long_cwd):
+            self.skipTest('Filesystem provides no distinct 8.3 short-path alias')
+        (script.parent / 'photo.JPG').write_bytes(b'photo')
+        (script.parent / 'ordinary.bat').write_bytes(b'ordinary program')
+        result = subprocess.run(
+            f'cmd.exe /d /v:off /s /c ""{launcher.name}" --apply"',
+            cwd=short_cwd, capture_output=True, timeout=30)
+        self.assertTrue(launcher.is_file(), result.stdout + result.stderr)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(launcher.read_bytes(), before)
+        self.assertEqual((script.parent / 'photos' / 'photo.JPG').read_bytes(), b'photo')
+        self.assertFalse((script.parent / 'programs' / launcher.name).exists())
+        self.assertEqual((script.parent / 'programs' / 'ordinary.bat').read_bytes(),
+                         b'ordinary program')
+        self.assertFalse((script.parent / 'ordinary.bat').exists())
+
     @unittest.skipIf(os.name == 'nt', 'POSIX configuration parser only')
     def test_posix_wildcard_config_is_rejected_before_moves(self):
         script = self.copy_bundle()

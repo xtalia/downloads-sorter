@@ -29,14 +29,20 @@ try {
             $map[$ext] = $parts[0]
         }
     }
+    # Expand 8.3 aliases once so identities match Get-ChildItem's long paths.
+    $scriptPath = (Get-Item -LiteralPath $PSCommandPath -Force).FullName
+    $launcherPath = $null
+    if ($env:DOWNLOADS_SORTER_LAUNCHER) {
+        $launcherPath = (Get-Item -LiteralPath $env:DOWNLOADS_SORTER_LAUNCHER -Force).FullName
+    }
     $errors = 0
     $moved = 0
     $planned = 0
     foreach ($file in @(Get-ChildItem -LiteralPath $root -File -Force)) {
         if (@('sort-downloads.bat', 'sort-downloads.ps1', 'sort-downloads-legacy.bat', 'sort-downloads-legacy.js', 'sort-downloads.sh', 'sort downloads.command', 'categories.txt', 'readme.md', 'license') -contains $file.Name.ToLowerInvariant()) { continue }
         if (($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
-            [string]::Equals($file.FullName, $PSCommandPath, [StringComparison]::OrdinalIgnoreCase) -or
-            [string]::Equals($file.FullName, $env:DOWNLOADS_SORTER_LAUNCHER, [StringComparison]::OrdinalIgnoreCase)) { continue }
+            [string]::Equals($file.FullName, $scriptPath, [StringComparison]::OrdinalIgnoreCase) -or
+            [string]::Equals($file.FullName, $launcherPath, [StringComparison]::OrdinalIgnoreCase)) { continue }
         if (-not $file.Extension) { continue }
         $ext = $file.Extension.Substring(1).ToLowerInvariant()
         if (-not $map.ContainsKey($ext)) { continue }
