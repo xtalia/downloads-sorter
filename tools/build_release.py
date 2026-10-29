@@ -7,24 +7,19 @@ import zipfile
 
 REPO = Path(__file__).resolve().parents[1]
 PLATFORM_FILES = {
-    'windows': ('categories.txt', 'sort-downloads.bat', 'sort-downloads.ps1',
-                'sort-downloads-legacy.bat', 'sort-downloads-legacy.js'),
-    'linux': ('categories.txt', 'sort-downloads.sh'),
-    'macos': ('categories.txt', 'Sort Downloads.command'),
+    'windows': ('sort-downloads.bat', 'sort-downloads-legacy.bat'),
+    'linux': ('sort-downloads.sh',),
+    'macos': ('Sort Downloads.command',),
 }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', default='1.0.0')
+    parser.add_argument('--version', default='1.1.0')
     parser.add_argument('--output', type=Path, default=REPO / 'dist')
     args = parser.parse_args()
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', args.version):
         parser.error('version must use MAJOR.MINOR.PATCH')
-    mappings = [(REPO / p / 'categories.txt').read_bytes().replace(b'\r\n', b'\n')
-                for p in ('windows', 'linux', 'macos')]
-    if mappings[0] != mappings[1] or mappings[0] != mappings[2]:
-        parser.error('categories.txt differs across platforms')
     if (REPO / 'linux' / 'sort-downloads.sh').read_bytes() != (REPO / 'macos' / 'Sort Downloads.command').read_bytes():
         parser.error('Linux and macOS implementations must stay identical')
     args.output.mkdir(parents=True, exist_ok=True)
@@ -46,6 +41,11 @@ def main():
                 z.writestr(info, data)
         checksums.append(f'{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}')
         print(archive)
+    python_asset = args.output / 'sort-downloads.py'
+    python_asset.write_bytes((REPO / 'python' / 'sort-downloads.py').read_bytes().replace(b'\r\n', b'\n'))
+    python_asset.chmod(0o755)
+    checksums.append(f'{hashlib.sha256(python_asset.read_bytes()).hexdigest()}  {python_asset.name}')
+    print(python_asset)
     (args.output / 'SHA256SUMS.txt').write_text('\n'.join(checksums) + '\n', encoding='ascii', newline='\n')
 
 

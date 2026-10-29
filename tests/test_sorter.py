@@ -37,7 +37,7 @@ class SorterTest(unittest.TestCase):
         if not default_root:
             command += ['--path', Path(root or self.root).as_posix()]
         command += args
-        return subprocess.run(command, capture_output=True, timeout=30, cwd=cwd)
+        return subprocess.run(command, capture_output=True, timeout=90, cwd=cwd)
 
     def copy_bundle(self, name='bundle'):
         source = REPO / SCRIPTS[VARIANT]
@@ -48,7 +48,6 @@ class SorterTest(unittest.TestCase):
     @unittest.skipIf(os.name == 'nt', 'POSIX interpreters only')
     def test_posix_initially_empty_extension_arrays_are_safe(self):
         script = self.copy_bundle()
-        script.with_name('categories.txt').write_text('photos jpg\n')
         (self.root / 'photo.JPG').write_bytes(b'photo')
         result = self.run_sorter('--apply', script=script)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -140,63 +139,10 @@ class SorterTest(unittest.TestCase):
                          b'ordinary program')
         self.assertFalse((script.parent / 'ordinary.bat').exists())
 
-    @unittest.skipIf(os.name == 'nt', 'POSIX configuration parser only')
-    def test_posix_wildcard_config_is_rejected_before_moves(self):
-        script = self.copy_bundle()
-        script.with_name('categories.txt').write_text('docs pdf\nphotos *\n')
-        cwd = Path(self.temp.name) / 'cwd'
-        cwd.mkdir()
-        (cwd / 'jpg').write_bytes(b'glob match')
-        for name in ['photo.jpg', 'book.pdf']:
-            (self.root / name).write_bytes(b'stay')
-        result = self.run_sorter('--apply', script=script, cwd=cwd)
-        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        for name in ['photo.jpg', 'book.pdf']:
-            self.assertEqual((self.root / name).read_bytes(), b'stay')
-        self.assertEqual(sorted(p.name for p in self.root.iterdir()), ['book.pdf', 'photo.jpg'])
 
-    def test_directory_config_is_rejected_before_moves(self):
-        script = self.copy_bundle()
-        config = script.with_name('categories.txt')
-        config.unlink()
-        config.mkdir()
-        (self.root / 'photo.jpg').write_bytes(b'stay')
-        result = self.run_sorter('--apply', script=script)
-        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        self.assertEqual((self.root / 'photo.jpg').read_bytes(), b'stay')
-        self.assertFalse((self.root / 'photos').exists())
 
-    @unittest.skipUnless(sys.platform.startswith('linux'), 'Linux procfs read-error fixture')
-    def test_posix_config_read_error_returns_invalid_config(self):
-        if not Path('/proc/self/mem').is_file():
-            self.skipTest('procfs read-error fixture unavailable')
-        script = self.copy_bundle()
-        config = script.with_name('categories.txt')
-        config.unlink()
-        config.symlink_to('/proc/self/mem')
-        (self.root / 'photo.jpg').write_bytes(b'stay')
-        result = self.run_sorter('--apply', script=script)
-        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        self.assertEqual((self.root / 'photo.jpg').read_bytes(), b'stay')
-        self.assertFalse((self.root / 'photos').exists())
 
-    def test_duplicate_extension_config_is_rejected_before_moves(self):
-        script = self.copy_bundle()
-        script.with_name('categories.txt').write_text('photos jpg\ndocs jpg\n')
-        (self.root / 'photo.jpg').write_bytes(b'stay')
-        result = self.run_sorter('--apply', script=script)
-        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        self.assertEqual((self.root / 'photo.jpg').read_bytes(), b'stay')
-        self.assertFalse((self.root / 'photos').exists())
 
-    def test_invalid_category_config_is_rejected_before_moves(self):
-        script = self.copy_bundle()
-        script.with_name('categories.txt').write_text('photos jpg\n../escape pdf\n')
-        (self.root / 'photo.jpg').write_bytes(b'stay')
-        result = self.run_sorter('--apply', script=script)
-        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        self.assertEqual((self.root / 'photo.jpg').read_bytes(), b'stay')
-        self.assertFalse((self.root / 'photos').exists())
 
     @unittest.skipIf(os.name == 'nt', 'POSIX-only filename characters')
     def test_posix_trailing_newline_extension_stays_unknown(self):
@@ -244,7 +190,7 @@ class SorterTest(unittest.TestCase):
         names = ['sort-downloads.bat', 'sort-downloads.ps1',
                  'sort-downloads-legacy.bat', 'sort-downloads-legacy.js',
                  'sort-downloads.sh', 'Sort Downloads.command',
-                 'categories.txt', 'README.md', 'LICENSE']
+                 'categories.txt', 'README.md', 'LICENSE', 'sort-downloads.py']
         for name in names:
             (self.root / name).write_bytes(b'tool')
         result = self.run_sorter('--apply')
@@ -252,10 +198,26 @@ class SorterTest(unittest.TestCase):
         for name in names:
             self.assertEqual((self.root / name).read_bytes(), b'tool')
 
-    def test_default_preview_does_not_change_anything(self):
+    def test_default_moves_immediately(self):
+        (self.root / 'photo.HEIC').write_bytes(b'photo')
+        result = self.run_sorter()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(b'MOVED:', result.stdout)
+        self.assertFalse((self.root / 'photo.HEIC').exists())
+        self.assertEqual((self.root / 'photos' / 'photo.HEIC').read_bytes(), b'photo')
+
+    def test_no_arguments_moves_files_in_script_directory(self):
+        script = self.copy_bundle()
+        (script.parent / 'photo.JPG').write_bytes(b'photo')
+        result = self.run_sorter(script=script, default_root=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((script.parent / 'photos' / 'photo.JPG').read_bytes(), b'photo')
+        self.assertFalse((script.parent / 'photo.JPG').exists())
+
+    def test_explicit_dry_run_does_not_change_anything(self):
         (self.root / 'preview.HEIC').write_bytes(b'preview')
         before = sorted(p.name for p in self.root.iterdir())
-        result = self.run_sorter()
+        result = self.run_sorter('--dry-run')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(b'PLAN:', result.stdout)
         self.assertEqual(sorted(p.name for p in self.root.iterdir()), before)
@@ -354,6 +316,17 @@ class SorterTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         for name in ['-option.JPG', 'line\nbreak.JPG', "quote'file.JPG"]:
             self.assertEqual((self.root / 'photos' / name).read_bytes(), b'data')
+
+    def test_all_supported_extensions_match_python(self):
+        import runpy
+        categories = runpy.run_path(str(REPO / 'python' / 'sort-downloads.py'))['CATEGORIES']
+        self.assertEqual(len(categories), 145)
+        for ext in categories:
+            (self.root / ('supported.' + ext.upper())).write_bytes(ext.encode())
+        result = self.run_sorter()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for ext, category in categories.items():
+            self.assertEqual((self.root / category / ('supported.' + ext.upper())).read_bytes(), ext.encode())
 
     def test_case_insensitive_extensions(self):
         names = ['lower.jpg', 'upper.JPG', 'mixed.JpG', 'phone.HEIC']
