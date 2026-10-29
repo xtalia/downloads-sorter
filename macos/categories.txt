@@ -1,0 +1,8 @@
+archives zip gz tgz rar 7z tar bz2 xz cab arj lzh ace 001 zst bz z lz lzma txz tbz2
+iso iso img bin cue nrg mdf mds vcd dmg vhd vhdx vdi qcow2
+music mp3 wav flac aac ogg wma m4a aiff aif alac ape pls m3u m3u8 aimppl opus mid midi
+video avi mov mp4 mkv 3gp webm flv wmv mpeg mpg vob m4v ts mts m2ts divx f4v
+programs exe msi msix appx apk pkg bat sh deb rpm jar py com cmd scr ps1 command appimage
+photos jpg jpeg jpe heic heif cr2 cr3 nef arw dng raw orf rw2 srw tif tiff pef bay raf
+images png bmp gif svg webp ico psd ai xcf emf wmf dds jpf jpx avif jxl eps
+docs pdf txt doc docx xls xlsx ods rtf odt ppt pptx csv djvu epub fb2 md tex log mobi azw azw3 odp ics

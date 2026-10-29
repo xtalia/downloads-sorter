@@ -1,0 +1,8 @@
+* text=auto eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.js text eol=crlf
+*.sh text eol=lf
+*.command text eol=lf
+*.txt text eol=lf
+reference/original.bat -text -diff
